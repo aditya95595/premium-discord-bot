@@ -26,7 +26,7 @@ client.on(Events.MessageCreate,async message=>{try{if(message.author.bot||!messa
 client.on(Events.InteractionCreate,async interaction=>{try{if(!interaction.isChatInputCommand())return;const command=commands.get(interaction.commandName.toLowerCase());if(!command)return interaction.reply({content:'Unknown command.',ephemeral:true});await executeCommand(interaction,command);}catch(e){error('Interaction handler error',e instanceof Error?e.message:String(e));if(!interaction.replied&&!interaction.deferred)await interaction.reply({content:'An unexpected error occurred.',ephemeral:true}).catch(()=>{});}});
 client.on(Events.GuildMemberAdd,member=>void recordJoin(member));
 client.on(Events.ChannelDelete,channel=>{if(channel.guild)void recordDestructiveAction(channel.guild,'CHANNEL_DELETE',channel.id);});
-client.on(Events.RoleDelete,role=>void recordDestructiveAction(role.guild,'ROLE_DELETE',role.id));
+client.on(Events.GuildRoleDelete,role=>void recordDestructiveAction(role.guild,'ROLE_DELETE',role.id));
 client.on(Events.GuildBanAdd,ban=>void recordDestructiveAction(ban.guild,'BAN',ban.user.id));
 process.on('unhandledRejection',e=>error('UnhandledRejection',e));process.on('uncaughtException',e=>error('UncaughtException',e));
 async function start(){const server=createHealthServer(client);await client.login(token);info('Startup: database ready');info(`Health: /health on port ${process.env.PORT||3000}`);info(`Discord: ${client.user?.tag||'unknown'}`);info(`Guilds: ${client.guilds.cache.size}`);const shutdown=()=>{stopReminderService();clearStatusTimers();server.close();client.destroy();db.close();};process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);}
