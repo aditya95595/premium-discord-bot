@@ -3,32 +3,38 @@ import db from '../db';
 import { info, warn } from '../logger';
 
 const LOCKDOWN_TYPES = new Set([ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum, ChannelType.GuildMedia]);
-
 type OverwriteSnapshot = { allow: string; deny: string };
+const LOCKDOWN_PERMISSIONS = [PermissionFlagsBits.SendMessages, PermissionFlagsBits.AddReactions, PermissionFlagsBits.CreatePublicThreads, PermissionFlagsBits.CreatePrivateThreads, PermissionFlagsBits.SendMessagesInThreads] as const;
+const PERMISSION_NAMES: Record<string, string> = {
+  [PermissionFlagsBits.SendMessages.toString()]: 'SendMessages',
+  [PermissionFlagsBits.AddReactions.toString()]: 'AddReactions',
+  [PermissionFlagsBits.CreatePublicThreads.toString()]: 'CreatePublicThreads',
+  [PermissionFlagsBits.CreatePrivateThreads.toString()]: 'CreatePrivateThreads',
+  [PermissionFlagsBits.SendMessagesInThreads.toString()]: 'SendMessagesInThreads',
+};
 
 function snapshotEveryone(channel: any): OverwriteSnapshot {
   const overwrite = channel.permissionOverwrites.cache.get(channel.guild.roles.everyone.id);
   return { allow: (overwrite?.allow?.bitfield ?? 0n).toString(), deny: (overwrite?.deny?.bitfield ?? 0n).toString() };
 }
 
+function originalState(snapshot: OverwriteSnapshot, permission: bigint): true | false | null {
+  const allow = BigInt(snapshot.allow), deny = BigInt(snapshot.deny);
+  if ((allow & permission) !== 0n) return true;
+  if ((deny & permission) !== 0n) return false;
+  return null;
+}
+
 function restorePayload(snapshot: OverwriteSnapshot) {
-  return {
-    SendMessages: null,
-    AddReactions: null,
-    CreatePublicThreads: null,
-    CreatePrivateThreads: null,
-    SendMessagesInThreads: null,
-  };
+  return Object.fromEntries(LOCKDOWN_PERMISSIONS.map(permission => [PERMISSION_NAMES[permission.toString()], originalState(snapshot, permission)]));
 }
 
 export async function enableLockdown(guild: Guild, reason = 'Security lockdown') {
   const me = guild.members.me;
   if (!me?.permissions.has(PermissionFlagsBits.ManageChannels)) return { ok: false, changed: 0, skipped: 0, reason: 'I need Manage Channels permission.' };
-
   let changed = 0, skipped = 0;
   const existing = db.prepare('SELECT channel_id FROM lockdown_overwrites WHERE guild_id=?').all(guild.id) as Array<{ channel_id: string }>;
   const existingIds = new Set(existing.map(x => x.channel_id));
-
   for (const channel of guild.channels.cache.values()) {
     if (!LOCKDOWN_TYPES.has(channel.type) || !('permissionOverwrites' in channel)) { skipped++; continue; }
     if (!channel.permissionsFor(me)?.has(PermissionFlagsBits.ManageChannels)) { skipped++; continue; }
@@ -37,13 +43,7 @@ export async function enableLockdown(guild: Guild, reason = 'Security lockdown')
         const snap = snapshotEveryone(channel);
         db.prepare('INSERT OR IGNORE INTO lockdown_overwrites(guild_id,channel_id,allow,deny) VALUES(?,?,?,?)').run(guild.id, channel.id, snap.allow, snap.deny);
       }
-      await channel.permissionOverwrites.edit(guild.roles.everyone, {
-        SendMessages: false,
-        AddReactions: false,
-        CreatePublicThreads: false,
-        CreatePrivateThreads: false,
-        SendMessagesInThreads: false,
-      }, { reason });
+      await channel.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: false, AddReactions: false, CreatePublicThreads: false, CreatePrivateThreads: false, SendMessagesInThreads: false }, { reason });
       changed++;
     } catch (e) {
       skipped++;
@@ -66,15 +66,11 @@ export async function disableLockdown(guild: Guild, reason = 'Security lockdown 
     if (!channel || !('permissionOverwrites' in channel) || !channel.permissionsFor(me)?.has(PermissionFlagsBits.ManageChannels)) { skipped++; continue; }
     try {
       const current = channel.permissionOverwrites.cache.get(guild.roles.everyone.id);
+      if (!current) { skipped++; continue; }
       const originalAllow = BigInt(row.allow), originalDeny = BigInt(row.deny);
-      const currentAllow = current?.allow?.bitfield ?? 0n;
-      const currentDeny = current?.deny?.bitfield ?? 0n;
-      const changedByOtherActor = current && (currentAllow !== originalAllow || currentDeny !== originalDeny) &&
-        ((currentDeny & BigInt(PermissionFlagsBits.SendMessages)) === 0n || (originalDeny & BigInt(PermissionFlagsBits.SendMessages)) !== 0n);
-      if (changedByOtherActor) {
-        skipped++;
-        continue;
-      }
+      const lockdownBits = LOCKDOWN_PERMISSIONS.reduce((bits, permission) => bits | permission, 0n);
+      const nonLockdownChanged = ((current.allow.bitfield ^ originalAllow) | (current.deny.bitfield ^ originalDeny)) & ~lockdownBits;
+      if (nonLockdownChanged !== 0n) { skipped++; continue; }
       await channel.permissionOverwrites.edit(guild.roles.everyone, restorePayload({ allow: row.allow, deny: row.deny }), { reason });
       restored++;
     } catch (e) {
