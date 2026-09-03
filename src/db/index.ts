@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT,gu
 CREATE INDEX IF NOT EXISTS idx_audit ON audit_events(guild_id,timestamp DESC);
 CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY AUTOINCREMENT,guild_id TEXT NOT NULL,user_id TEXT NOT NULL,channel_id TEXT NOT NULL,text TEXT NOT NULL,due_at INTEGER NOT NULL,delivered INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_reminders ON reminders(delivered,due_at);
+CREATE TABLE IF NOT EXISTS lockdown_overwrites (guild_id TEXT NOT NULL,channel_id TEXT NOT NULL,allow TEXT NOT NULL DEFAULT '0',deny TEXT NOT NULL DEFAULT '0',PRIMARY KEY(guild_id,channel_id));
+CREATE INDEX IF NOT EXISTS idx_lockdown_overwrites ON lockdown_overwrites(guild_id);
 `);
 info('Database opened at', DB_PATH);
 export default db;
