@@ -1,53 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { addInfraction } from '../db/infractions';
 import { isIdLike } from '../utils/validation';
-
-const data = new SlashCommandBuilder()
-  .setName('ban')
-  .setDescription('Ban a member')
-  .addUserOption(o => o.setName('target').setDescription('Member to ban').setRequired(true))
-  .addIntegerOption(o => o.setName('days').setDescription('Delete messages (days)').setMinValue(0).setMaxValue(7))
-  .addStringOption(o => o.setName('reason').setDescription('Reason'))
-  .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
-
-async function executeSlash(interaction: any) {
-  const guild = interaction.guild;
-  if (!guild) return interaction.reply({ content: 'This command must be used in a guild.', ephemeral: true });
-  const user = interaction.options.getUser('target', true);
-  const days = interaction.options.getInteger('days') ?? 0;
-  const reason = interaction.options.getString('reason') ?? 'No reason';
-  if (!interaction.memberPermissions.has('BanMembers')) return interaction.reply({ content: 'You lack BanMembers permission.', ephemeral: true });
-  if (!guild.members.me?.permissions.has('BanMembers')) return interaction.reply({ content: 'I lack BanMembers permission.', ephemeral: true });
-  // Can't check hierarchy against non-members. We attempt to fetch member if present.
-  const member = guild.members.cache.get(user.id) || await guild.members.fetch(user.id).catch(() => null);
-  if (member && member.roles.highest.position >= (interaction.member as any).roles.highest.position) {
-    return interaction.reply({ content: 'You cannot ban that member due to role hierarchy.', ephemeral: true });
-  }
-  await guild.bans.create(user.id, { days, reason }).catch((e:any) => {
-    return interaction.reply({ content: 'Failed to ban: ' + (e.message ?? 'unknown'), ephemeral: true });
-  });
-  addInfraction(guild.id, user.id, interaction.user.id, 'ban', reason);
-  return interaction.reply({ content: `Banned ${user.tag}.` });
-}
-
-async function executePrefix(message: any, args: string[]) {
-  const guild = message.guild;
-  if (!guild) return message.reply('This must be used in a guild.');
-  if (!message.member.permissions.has('BanMembers')) return message.reply('You lack permission.');
-  if (!guild.members.me?.permissions.has('BanMembers')) return message.reply('I lack permission.');
-  const target = args[0];
-  if (!target || !isIdLike(target)) return message.reply('Provide a user id.');
-  const days = Number(args[1]) || 0;
-  const reason = args.slice(2).join(' ') || 'No reason';
-  await guild.bans.create(target, { days, reason }).catch((e:any) => message.reply('Failed to ban: ' + e.message));
-  addInfraction(guild.id, target, message.author.id, 'ban', reason);
-  message.channel.send(`Banned <@${target}>.`);
-}
-
-export = {
-  name: 'ban',
-  description: 'Ban a member',
-  data,
-  executeSlash,
-  executePrefix
-};
+const data=new SlashCommandBuilder().setName('ban').setDescription('Ban a member').addUserOption(o=>o.setName('target').setDescription('Member to ban').setRequired(true)).addIntegerOption(o=>o.setName('days').setDescription('Delete messages from the last N days').setMinValue(0).setMaxValue(7)).addStringOption(o=>o.setName('reason').setDescription('Reason')).setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
+async function executeSlash(i:any){const g=i.guild;if(!g)return i.reply({content:'Guild only.',ephemeral:true});const u=i.options.getUser('target',true),days=i.options.getInteger('days')??0,reason=i.options.getString('reason')??'No reason';const m=g.members.cache.get(u.id)||await g.members.fetch(u.id).catch(()=>null);if(m&&(m.roles.highest.position>=i.member.roles.highest.position||m.roles.highest.position>=g.members.me?.roles.highest.position))return i.reply({content:'Role hierarchy prevents this action.',ephemeral:true});try{await g.bans.create(u.id,{deleteMessageSeconds:days*86400,reason});addInfraction(g.id,u.id,i.user.id,'ban',reason);return i.reply({content:`Banned ${u.tag}.`});}catch(e){return i.reply({content:`Failed to ban: ${e instanceof Error?e.message:'unknown error'}`,ephemeral:true});}}
+async function executePrefix(m:any,args:string[]){if(!m.guild)return m.reply('Guild only.');const target=args[0]?.replace(/[<@!>]/g,'');if(!target||!isIdLike(target))return m.reply('Usage: ban @user [days] [reason]');const days=Math.min(7,Math.max(0,Number(args[1])||0)),reason=args.slice(2).join(' ')||'No reason';const member=m.guild.members.cache.get(target)||await m.guild.members.fetch(target).catch(()=>null);if(member&&(member.roles.highest.position>=m.member.roles.highest.position||member.roles.highest.position>=m.guild.members.me?.roles.highest.position))return m.reply('Role hierarchy prevents this action.');try{await m.guild.bans.create(target,{deleteMessageSeconds:days*86400,reason});addInfraction(m.guild.id,target,m.author.id,'ban',reason);return m.reply(`Banned <@${target}>.`);}catch(e){return m.reply(`Failed to ban: ${e instanceof Error?e.message:'unknown error'}`);}}
+export={name:'ban',description:'Ban a member',permissions:['BanMembers'],data,executeSlash,executePrefix};
