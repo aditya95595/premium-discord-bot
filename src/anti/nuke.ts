@@ -1,39 +1,7 @@
-import { Guild, GuildAuditLogsEntry } from 'discord.js';
+import { Guild, AuditLogEvent } from 'discord.js';
 import db from '../db';
+import { getGuildSettings } from '../db/settings';
 import { info, warn } from '../logger';
-
-// Detect multiple destructive events from same executor in short time
-const WINDOW_MS = 60_000;
-const THRESHOLD = 3;
-
-const recent: Map<string, Array<{ executor: string; ts: number }>> = new Map();
-
-export async function recordDestructiveAction(guild: Guild, action: string, targetId?: string) {
-  try {
-    const logs = await guild.fetchAuditLogs({ limit: 5, type: 'CHANNEL_DELETE' as any }).catch(() => null);
-    let executorId: string | undefined;
-    if (logs && logs.entries.size) {
-      const entry = logs.entries.first() as GuildAuditLogsEntry | undefined;
-      executorId = entry?.executor?.id;
-    }
-    if (!executorId) return;
-    const arr = recent.get(guild.id) || [];
-    const now = Date.now();
-    const windowed = arr.filter(a => now - a.ts <= WINDOW_MS);
-    windowed.push({ executor: executorId, ts: now });
-    recent.set(guild.id, windowed);
-    const count = windowed.filter(x => x.executor === executorId).length;
-    db.prepare('INSERT INTO audit_events (guild_id, action, target_id, executor_id, timestamp) VALUES (?, ?, ?, ?, ?)').run(guild.id, action, targetId ?? null, executorId, now);
-    if (count >= THRESHOLD) {
-      info('Nuke detected, executor:', executorId, 'guild:', guild.id);
-      // Attempt to ban executor after validation
-      const member = guild.members.cache.get(executorId) || await guild.members.fetch(executorId).catch(() => null);
-      if (member && guild.members.me?.permissions.has('BanMembers')) {
-        await member.ban({ reason: 'Anti-nuke: mass destructive actions detected' }).catch(e => warn('Failed to ban suspected nuker', e));
-        db.prepare('INSERT INTO audit_events (guild_id, action, target_id, executor_id, timestamp) VALUES (?, ?, ?, ?, ?)').run(guild.id, 'anti_nuke_ban', executorId, executorId, Date.now());
-      }
-    }
-  } catch (e) {
-    warn('recordDestructiveAction error', (e as Error).message);
-  }
-}
+const recent=new Map<string,Array<{executor:string;ts:number}>>();
+const auditType:Record<string,AuditLogEvent>={CHANNEL_DELETE:AuditLogEvent.ChannelDelete,ROLE_DELETE:AuditLogEvent.RoleDelete,BAN:AuditLogEvent.MemberBanAdd};
+export async function recordDestructiveAction(guild:Guild,action:string,targetId?:string){try{const s=getGuildSettings(guild.id);if(!s.raid_mode&&action==='BAN')return;const now=Date.now(),type=auditType[action]??AuditLogEvent.ChannelDelete,logs=await guild.fetchAuditLogs({limit:5,type}).catch(()=>null);const entry=logs?.entries.find(x=>!x.createdTimestamp||now-x.createdTimestamp<10000);const executorId=entry?.executor?.id;if(!executorId)return;const arr=(recent.get(guild.id)||[]).filter(x=>now-x.ts<=Math.max(15,s.raid_window_seconds)*1000);arr.push({executor:executorId,ts:now});recent.set(guild.id,arr);db.prepare('INSERT INTO audit_events(guild_id,action,target_id,executor_id,timestamp) VALUES(?,?,?,?,?)').run(guild.id,action,targetId??null,executorId,now);const count=arr.filter(x=>x.executor===executorId).length;if(count<s.raid_threshold)return;const member=guild.members.cache.get(executorId)||await guild.members.fetch(executorId).catch(()=>null);if(!member||executorId===guild.ownerId||executorId===guild.members.me?.id)return;if(member.roles.highest.position>=guild.members.me!.roles.highest.position)return;if(guild.members.me?.permissions.has('BanMembers')){await member.ban({reason:'Anti-nuke: repeated destructive actions'}).catch(e=>warn('Anti-nuke ban failed',e));info('Anti-nuke blocked executor',executorId);}}catch(e){warn('recordDestructiveAction error',e instanceof Error?e.message:String(e));}}
