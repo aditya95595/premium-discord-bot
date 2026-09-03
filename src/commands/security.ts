@@ -6,150 +6,31 @@ import { enableLockdown, disableLockdown } from '../security/lockdown';
 const ACTIONS = ['alert', 'lockdown', 'ban_and_lockdown'] as const;
 type SecurityAction = typeof ACTIONS[number];
 const ID_RE = /^\d{15,25}$/;
+function normalizeId(value: string) { return value.trim().replace(/[<@!>]/g, ''); }
+function trustedIds(value: string) { return value.split(',').map(x => x.trim()).filter(x => ID_RE.test(x)); }
+function formatAction(action: string) { return action === 'ban_and_lockdown' ? 'Ban + lockdown' : action === 'lockdown' ? 'Lockdown' : 'Alert only'; }
+function securityEmbed(guildId: string) { const s=getGuildSettings(guildId),trusted=trustedIds(s.security_trusted_users);return new EmbedBuilder().setTitle('🛡️ Security Center').setDescription('Anti-nuke protection and emergency lockdown controls.').addFields({name:'Protection',value:s.security_enabled?'🟢 Enabled':'🔴 Disabled',inline:true},{name:'Response',value:formatAction(s.security_action),inline:true},{name:'Threshold',value:`${s.security_threshold} actions`,inline:true},{name:'Window',value:`${s.security_window_seconds}s`,inline:true},{name:'Raid mode',value:s.raid_mode?'🔒 Active':'🟢 Normal',inline:true},{name:'Trusted users',value:trusted.length?trusted.map(id=>`<@${id}>`).join(', '):'None',inline:false}).setTimestamp(); }
+function recordConfigChange(guildId:string,action:string,targetId?:string){db.prepare('INSERT INTO audit_events(guild_id,action,target_id,timestamp) VALUES(?,?,?,?)').run(guildId,action,targetId??null,Date.now());}
 
-function normalizeId(value: string) {
-  return value.trim().replace(/[<@!>]/g, '');
-}
-
-function trustedIds(value: string) {
-  return value.split(',').map(x => x.trim()).filter(Boolean);
-}
-
-function formatAction(action: string) {
-  return action === 'ban_and_lockdown' ? 'Ban + lockdown' : action === 'lockdown' ? 'Lockdown' : 'Alert only';
-}
-
-function securityEmbed(guildId: string) {
-  const s = getGuildSettings(guildId);
-  const trusted = trustedIds(s.security_trusted_users);
-  return new EmbedBuilder()
-    .setTitle('🛡️ Security Center')
-    .setDescription('Anti-nuke protection and emergency lockdown controls.')
-    .addFields(
-      { name: 'Protection', value: s.security_enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-      { name: 'Response', value: formatAction(s.security_action), inline: true },
-      { name: 'Threshold', value: `${s.security_threshold} actions`, inline: true },
-      { name: 'Window', value: `${s.security_window_seconds}s`, inline: true },
-      { name: 'Raid mode', value: s.raid_mode ? '🔒 Active' : '🟢 Normal', inline: true },
-      { name: 'Trusted users', value: trusted.length ? trusted.map(id => `<@${id}>`).join(', ') : 'None', inline: false },
-    )
-    .setTimestamp();
-}
-
-function recordConfigChange(guildId: string, action: string, targetId?: string) {
-  db.prepare('INSERT INTO audit_events(guild_id,action,target_id,timestamp) VALUES(?,?,?,?)').run(guildId, action, targetId ?? null, Date.now());
-}
-
-async function run(source: any, subcommand: string, args: string[]) {
-  if (!source.guild) throw new Error('This command can only be used in a server.');
-  const guild = source.guild;
-  const settings = getGuildSettings(guild.id);
-  const prefix = settings.prefix || '!';
-
-  if (subcommand === 'status') return { embeds: [securityEmbed(guild.id)] };
-
-  if (subcommand === 'enable' || subcommand === 'disable') {
-    const enabled = subcommand === 'enable';
-    setGuildSetting(guild.id, 'security_enabled', enabled ? 1 : 0);
-    recordConfigChange(guild.id, enabled ? 'security_enabled' : 'security_disabled');
-    return `🛡️ Security protection ${enabled ? '**enabled**' : '**disabled**'}.`;
-  }
-
-  if (subcommand === 'action') {
-    const action = args[0]?.toLowerCase() as SecurityAction | undefined;
-    if (!action || !ACTIONS.includes(action)) return `Usage: \`${prefix}security action <alert|lockdown|ban_and_lockdown>\``;
-    setGuildSetting(guild.id, 'security_action', action);
-    recordConfigChange(guild.id, `security_action_${action}`);
-    return `🛡️ Security response set to **${formatAction(action)}**.`;
-  }
-
-  if (subcommand === 'threshold' || subcommand === 'window') {
-    const value = Number(args[0]);
-    const min = subcommand === 'threshold' ? 2 : 10;
-    const max = subcommand === 'threshold' ? 50 : 600;
-    if (!Number.isInteger(value) || value < min || value > max) return `Value must be an integer from **${min}** to **${max}**.`;
-    setGuildSetting(guild.id, subcommand === 'threshold' ? 'security_threshold' : 'security_window_seconds', value);
-    recordConfigChange(guild.id, `security_${subcommand}`);
-    return `🛡️ Security ${subcommand} set to **${value}${subcommand === 'window' ? 's' : ' actions'}**.`;
-  }
-
-  if (subcommand === 'trust-add' || subcommand === 'trust-remove') {
-    const id = normalizeId(args[0] ?? '');
-    if (!ID_RE.test(id)) return `Provide a valid Discord user ID or mention.`;
-    if (id === guild.ownerId || id === source.client.user?.id) return 'That user is already inherently trusted.';
-    const ids = trustedIds(settings.security_trusted_users);
-    if (subcommand === 'trust-add') {
-      if (ids.includes(id)) return `<@${id}> is already trusted.`;
-      ids.push(id);
-      setGuildSetting(guild.id, 'security_trusted_users', ids.join(','));
-      recordConfigChange(guild.id, 'security_trusted_add', id);
-      return `✅ Added <@${id}> to the security trusted list.`;
-    }
-    if (!ids.includes(id)) return `<@${id}> is not on the trusted list.`;
-    setGuildSetting(guild.id, 'security_trusted_users', ids.filter(x => x !== id).join(','));
-    recordConfigChange(guild.id, 'security_trusted_remove', id);
-    return `✅ Removed <@${id}> from the security trusted list.`;
-  }
-
-  if (subcommand === 'lockdown' || subcommand === 'unlock') {
-    if (!source.member?.permissions?.has(PermissionFlagsBits.ManageChannels)) throw new Error('Manage Channels permission is required for emergency lockdown controls.');
-    const result = subcommand === 'lockdown'
-      ? await enableLockdown(guild, `Manual security ${subcommand} by ${source.user?.id ?? source.author?.id}`)
-      : await disableLockdown(guild, `Manual security ${subcommand} by ${source.user?.id ?? source.author?.id}`);
-    if (!result.ok) throw new Error(result.reason);
-    if (subcommand === 'lockdown') return `🔒 **Lockdown enabled.** ${result.changed} channel(s) locked; ${result.skipped} skipped.`;
-    return `🔓 **Lockdown lifted.** ${result.restored} channel(s) restored; ${result.skipped} skipped; ${result.pending} pending for safe retry.`;
-  }
-
+async function run(source:any,subcommand:string,args:string[]){
+  if(!source.guild)throw new Error('This command can only be used in a server.');
+  const guild=source.guild,settings=getGuildSettings(guild.id),prefix=settings.prefix||'!';
+  if(subcommand==='status')return{embeds:[securityEmbed(guild.id)]};
+  if(subcommand==='enable'||subcommand==='disable'){const enabled=subcommand==='enable';setGuildSetting(guild.id,'security_enabled',enabled?1:0);recordConfigChange(guild.id,enabled?'security_enabled':'security_disabled');return `🛡️ Security protection ${enabled?'**enabled**':'**disabled**'}.`;}
+  if(subcommand==='action'){const action=args[0]?.toLowerCase() as SecurityAction|undefined;if(!action||!ACTIONS.includes(action))return `Usage: \`${prefix}security action <alert|lockdown|ban_and_lockdown>\``;setGuildSetting(guild.id,'security_action',action);recordConfigChange(guild.id,`security_action_${action}`);return `🛡️ Security response set to **${formatAction(action)}**.`;}
+  if(subcommand==='threshold'||subcommand==='window'){const value=Number(args[0]),min=subcommand==='threshold'?2:10,max=subcommand==='threshold'?50:600;if(!Number.isInteger(value)||value<min||value>max)return `Value must be an integer from **${min}** to **${max}**.`;setGuildSetting(guild.id,subcommand==='threshold'?'security_threshold':'security_window_seconds',value);recordConfigChange(guild.id,`security_${subcommand}`);return `🛡️ Security ${subcommand} set to **${value}${subcommand==='window'?'s':' actions'}**.`;}
+  if(subcommand==='trust-add'||subcommand==='trust-remove'){const id=normalizeId(args[0]??'');if(!ID_RE.test(id))return 'Provide a valid Discord user ID or mention.';if(id===guild.ownerId||id===source.client.user?.id)return 'That user is already inherently trusted.';const ids=trustedIds(settings.security_trusted_users);if(subcommand==='trust-add'){if(ids.includes(id))return `<@${id}> is already trusted.`;ids.push(id);setGuildSetting(guild.id,'security_trusted_users',ids.join(','));recordConfigChange(guild.id,'security_trusted_add',id);return `✅ Added <@${id}> to the security trusted list.`;}if(!ids.includes(id))return `<@${id}> is not on the trusted list.`;setGuildSetting(guild.id,'security_trusted_users',ids.filter(x=>x!==id).join(','));recordConfigChange(guild.id,'security_trusted_remove',id);return `✅ Removed <@${id}> from the security trusted list.`;}
+  if(subcommand==='lockdown'||subcommand==='unlock'){if(!source.member?.permissions?.has(PermissionFlagsBits.ManageChannels))throw new Error('Manage Channels permission is required for emergency lockdown controls.');const result=subcommand==='lockdown'?await enableLockdown(guild,`Manual security ${subcommand} by ${source.user?.id??source.author?.id}`):await disableLockdown(guild,`Manual security ${subcommand} by ${source.user?.id??source.author?.id}`);if(!result.ok)throw new Error(result.reason);if(subcommand==='lockdown')return `🔒 **Lockdown enabled.** ${result.changed} channel(s) locked; ${result.skipped} skipped.`;return `🔓 **Lockdown lifted.** ${result.restored} channel(s) restored; ${result.skipped} skipped; ${result.pending} pending for safe retry.`;}
   return `Usage: \`${prefix}security <status|enable|disable|action|threshold|window|trust-add|trust-remove|lockdown|unlock>\``;
 }
 
-const data = new SlashCommandBuilder()
-  .setName('security')
-  .setDescription('Configure anti-nuke protection and emergency lockdown')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .addSubcommand(s => s.setName('status').setDescription('View security protection status'))
-  .addSubcommand(s => s.setName('enable').setDescription('Enable anti-nuke protection'))
-  .addSubcommand(s => s.setName('disable').setDescription('Disable anti-nuke protection'))
-  .addSubcommand(s => s.setName('action').setDescription('Set the automatic response').addStringOption(o => o.setName('value').setDescription('Response mode').setRequired(true).addChoices(
-    { name: 'Alert only', value: 'alert' },
-    { name: 'Lockdown', value: 'lockdown' },
-    { name: 'Ban + lockdown', value: 'ban_and_lockdown' },
-  )))
-  .addSubcommand(s => s.setName('threshold').setDescription('Set destructive-action threshold').addIntegerOption(o => o.setName('value').setDescription('2-50 actions').setMinValue(2).setMaxValue(50).setRequired(true)))
-  .addSubcommand(s => s.setName('window').setDescription('Set detection window in seconds').addIntegerOption(o => o.setName('value').setDescription('10-600 seconds').setMinValue(10).setMaxValue(600).setRequired(true)))
-  .addSubcommand(s => s.setName('trust-add').setDescription('Add a trusted user').addUserOption(o => o.setName('user').setDescription('User to trust').setRequired(true)))
-  .addSubcommand(s => s.setName('trust-remove').setDescription('Remove a trusted user').addUserOption(o => o.setName('user').setDescription('User to untrust').setRequired(true)))
-  .addSubcommand(s => s.setName('lockdown').setDescription('Immediately lock supported text channels'))
-  .addSubcommand(s => s.setName('unlock').setDescription('Safely restore channels from lockdown'));
-
-async function executeSlash(i: any) {
-  try {
-    const sub = i.options.getSubcommand();
-    const args: string[] = [];
-    if (sub === 'action' || sub === 'threshold' || sub === 'window') args.push(String(i.options.getString('value') ?? i.options.getInteger('value')));
-    if (sub === 'trust-add' || sub === 'trust-remove') args.push(i.options.getUser('user').id);
-    return i.reply(await run(i, sub, args));
-  } catch (e) {
-    return i.reply({ content: e instanceof Error ? e.message : 'Security command failed.', ephemeral: true });
-  }
-}
-
-async function executePrefix(m: any, args: string[]) {
-  try {
-    const sub = (args.shift() ?? 'status').toLowerCase();
-    return m.reply(await run(m, sub, args));
-  } catch (e) {
-    return m.reply(e instanceof Error ? e.message : 'Security command failed.');
-  }
-}
-
-export default {
-  name: 'security',
-  description: 'Configure anti-nuke protection and emergency lockdown',
-  adminOnly: true,
-  cooldown: 2,
-  data,
-  executeSlash,
-  executePrefix,
-};
+const data=new SlashCommandBuilder().setName('security').setDescription('Configure anti-nuke protection and emergency lockdown').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+.addSubcommand(s=>s.setName('status').setDescription('View security protection status')).addSubcommand(s=>s.setName('enable').setDescription('Enable anti-nuke protection')).addSubcommand(s=>s.setName('disable').setDescription('Disable anti-nuke protection'))
+.addSubcommand(s=>s.setName('action').setDescription('Set the automatic response').addStringOption(o=>o.setName('value').setDescription('Response mode').setRequired(true).addChoices({name:'Alert only',value:'alert'},{name:'Lockdown',value:'lockdown'},{name:'Ban + lockdown',value:'ban_and_lockdown'})))
+.addSubcommand(s=>s.setName('threshold').setDescription('Set destructive-action threshold').addIntegerOption(o=>o.setName('value').setDescription('2-50 actions').setMinValue(2).setMaxValue(50).setRequired(true)))
+.addSubcommand(s=>s.setName('window').setDescription('Set detection window in seconds').addIntegerOption(o=>o.setName('value').setDescription('10-600 seconds').setMinValue(10).setMaxValue(600).setRequired(true)))
+.addSubcommand(s=>s.setName('trust-add').setDescription('Add a trusted user').addUserOption(o=>o.setName('user').setDescription('User to trust').setRequired(true))).addSubcommand(s=>s.setName('trust-remove').setDescription('Remove a trusted user').addUserOption(o=>o.setName('user').setDescription('User to untrust').setRequired(true)))
+.addSubcommand(s=>s.setName('lockdown').setDescription('Immediately lock supported text channels')).addSubcommand(s=>s.setName('unlock').setDescription('Safely restore channels from lockdown'));
+async function executeSlash(i:any){try{const sub=i.options.getSubcommand(),args:string[]=[];if(sub==='action'||sub==='threshold'||sub==='window')args.push(String(i.options.getString('value')??i.options.getInteger('value')));if(sub==='trust-add'||sub==='trust-remove')args.push(i.options.getUser('user').id);return i.reply(await run(i,sub,args));}catch(e){return i.reply({content:e instanceof Error?e.message:'Security command failed.',ephemeral:true});}}
+async function executePrefix(m:any,args:string[]){try{const sub=(args.shift()??'status').toLowerCase();return m.reply(await run(m,sub,args));}catch(e){return m.reply(e instanceof Error?e.message:'Security command failed.');}}
+export default{name:'security',description:'Configure anti-nuke protection and emergency lockdown',adminOnly:true,cooldown:2,data,executeSlash,executePrefix};
