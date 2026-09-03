@@ -1,0 +1,6 @@
+import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+const data=new SlashCommandBuilder().setName('clear').setDescription('Delete recent messages').addIntegerOption(o=>o.setName('amount').setDescription('1–100').setMinValue(1).setMaxValue(100).setRequired(true)).setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
+async function run(s:any,n:number){if(!s.channel?.isTextBased()||!('bulkDelete' in s.channel))throw new Error('This command requires a text channel.');if(!s.channel.permissionsFor(s.guild.members.me)?.has(PermissionFlagsBits.ManageMessages))throw new Error('I need Manage Messages permission.');const result=await (s.channel as any).bulkDelete(n,true);return `Deleted ${result.size} message(s).`;}
+async function executeSlash(i:any){try{return i.reply({content:await run(i,i.options.getInteger('amount',true)),ephemeral:true});}catch(e){return i.reply({content:e instanceof Error?e.message:'Clear failed.',ephemeral:true});}}
+async function executePrefix(m:any,args:string[]){const n=Number(args[0]);if(!Number.isInteger(n)||n<1||n>100)return m.reply('Usage: !clear <1-100>');try{return m.reply(await run(m,n));}catch(e){return m.reply(e instanceof Error?e.message:'Clear failed.');}}
+export={name:'clear',description:'Delete recent messages',permissions:['ManageMessages'],data,executeSlash,executePrefix};
