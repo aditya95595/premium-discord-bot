@@ -10,7 +10,8 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
 db.exec(`
-CREATE TABLE IF NOT EXISTS guild_settings (guild_id TEXT PRIMARY KEY,prefix TEXT NOT NULL DEFAULT '!',automod_enabled INTEGER NOT NULL DEFAULT 1,automod_profanity INTEGER NOT NULL DEFAULT 1,automod_caps INTEGER NOT NULL DEFAULT 1,automod_links INTEGER NOT NULL DEFAULT 1,automod_spam_threshold INTEGER NOT NULL DEFAULT 5,automod_mention_limit INTEGER NOT NULL DEFAULT 5,automod_invites INTEGER NOT NULL DEFAULT 1,automod_blocked_words TEXT NOT NULL DEFAULT '',automod_punishment TEXT NOT NULL DEFAULT 'delete',mod_log_channel TEXT,staff_roles TEXT NOT NULL DEFAULT '',raid_mode INTEGER NOT NULL DEFAULT 0,raid_threshold INTEGER NOT NULL DEFAULT 6,raid_window_seconds INTEGER NOT NULL DEFAULT 60,status_rotation_enabled INTEGER NOT NULL DEFAULT 0,status_rotation_interval INTEGER NOT NULL DEFAULT 60);
+CREATE TABLE IF NOT EXISTS guild_settings (guild_id TEXT PRIMARY KEY,prefix TEXT NOT NULL DEFAULT '!',automod_enabled INTEGER NOT NULL DEFAULT 1,automod_profanity INTEGER NOT NULL DEFAULT 1,automod_caps INTEGER NOT NULL DEFAULT 1,automod_links INTEGER NOT NULL DEFAULT 1,automod_spam_threshold INTEGER NOT NULL DEFAULT 5,automod_mention_limit INTEGER NOT NULL DEFAULT 5,automod_invites INTEGER NOT NULL DEFAULT 1,automod_blocked_words TEXT NOT NULL DEFAULT '',automod_punishment TEXT NOT NULL DEFAULT 'delete',mod_log_channel TEXT,staff_roles TEXT NOT NULL DEFAULT '',raid_mode INTEGER NOT NULL DEFAULT 0,raid_threshold INTEGER NOT NULL DEFAULT 6,raid_window_seconds INTEGER NOT NULL DEFAULT 60,status_rotation_enabled INTEGER NOT NULL DEFAULT 0,status_rotation_interval INTEGER NOT NULL DEFAULT 60,security_enabled INTEGER NOT NULL DEFAULT 1,security_action TEXT NOT NULL DEFAULT 'alert',security_threshold INTEGER NOT NULL DEFAULT 5,security_window_seconds INTEGER NOT NULL DEFAULT 30,security_trusted_users TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS idx_infractions ON infractions(guild_id,user_id,timestamp DESC);
 CREATE TABLE IF NOT EXISTS infractions (id INTEGER PRIMARY KEY AUTOINCREMENT,guild_id TEXT NOT NULL,user_id TEXT NOT NULL,moderator_id TEXT,type TEXT NOT NULL,reason TEXT,timestamp INTEGER NOT NULL,expires_at INTEGER);
 CREATE INDEX IF NOT EXISTS idx_infractions ON infractions(guild_id,user_id,timestamp DESC);
 CREATE TABLE IF NOT EXISTS command_permissions (guild_id TEXT NOT NULL,command_name TEXT NOT NULL,role_id TEXT NOT NULL,PRIMARY KEY(guild_id,command_name,role_id));
@@ -22,5 +23,10 @@ CREATE INDEX IF NOT EXISTS idx_audit ON audit_events(guild_id,timestamp DESC);
 CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY AUTOINCREMENT,guild_id TEXT NOT NULL,user_id TEXT NOT NULL,channel_id TEXT NOT NULL,text TEXT NOT NULL,due_at INTEGER NOT NULL,delivered INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_reminders ON reminders(delivered,due_at);
 `);
+const securityColumns:Record<string,string>={security_enabled:'INTEGER NOT NULL DEFAULT 1',security_action:"TEXT NOT NULL DEFAULT 'alert'",security_threshold:'INTEGER NOT NULL DEFAULT 5',security_window_seconds:'INTEGER NOT NULL DEFAULT 30',security_trusted_users:"TEXT NOT NULL DEFAULT ''"};
+for(const [name,definition] of Object.entries(securityColumns)){
+  const exists=(db.prepare('PRAGMA table_info(guild_settings)').all() as Array<{name:string}>).some(c=>c.name===name);
+  if(!exists)db.exec(`ALTER TABLE guild_settings ADD COLUMN ${name} ${definition}`);
+}
 info('Database opened at', DB_PATH);
 export default db;
