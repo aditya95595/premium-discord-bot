@@ -13,7 +13,6 @@ if(!secret)console.warn('[Dashboard] SESSION_SECRET is not set; dashboard login 
 const key=secret?crypto.createHash('sha256').update(secret).digest():null;
 const loginStates=new Map<string,number>();
 const rate=new Map<string,{window:number;count:number}>();
-
 function b64(buf:Buffer){return buf.toString('base64url')}
 function unb64(v:string){return Buffer.from(v,'base64url')}
 function seal(payload:object){if(!key)throw new Error('Dashboard session secret is not configured.');const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',key,iv),body=Buffer.from(JSON.stringify(payload)),encrypted=Buffer.concat([cipher.update(body),cipher.final()]);return `${b64(iv)}.${b64(cipher.getAuthTag())}.${b64(encrypted)}`}
@@ -24,7 +23,7 @@ function redirectUri(req:Request){return process.env.DISCORD_REDIRECT_URI||`${or
 async function discordJson(url:string,init?:RequestInit){const r=await fetch(url,init);if(!r.ok)throw new Error(`Discord API ${r.status}`);return r.json() as Promise<any>}
 function clientIp(req:Request){return req.ip||req.socket.remoteAddress||'unknown'}
 function rateLimit(req:Request,res:Response,limit:number,windowMs:number){const key=`${clientIp(req)}:${req.path}`;const now=Date.now();const old=rate.get(key);if(!old||now-old.window>=windowMs){rate.set(key,{window:now,count:1});return true}old.count++;if(old.count>limit){res.setHeader('Retry-After',Math.ceil((windowMs-(now-old.window))/1000));res.status(429).json({error:'Too many requests. Please try again shortly.'});return false}return true}
-function canMutate(req:Request,session:{csrf:string}){return crypto.timingSafeEqual(Buffer.from(session.csrf),Buffer.from(req.get('x-dashboard-csrf')||'').toString())}
+function canMutate(req:Request,session:{csrf:string}){const supplied=req.get('x-dashboard-csrf')||'';if(!supplied||supplied.length!==session.csrf.length)return false;return crypto.timingSafeEqual(Buffer.from(session.csrf),Buffer.from(supplied))}
 async function canManageGuild(client:Client,guildId:string,userId:string){const guild=client.guilds.cache.get(guildId);if(!guild)return false;if(guild.ownerId===userId)return true;const member=await guild.members.fetch(userId).catch(()=>null);return Boolean(member&&(member.permissions.has(PermissionFlagsBits.Administrator)||member.permissions.has(PermissionFlagsBits.ManageGuild)))}
 function requireAuth(req:Request,res:Response){const session=getSession(req);if(!session){res.status(401).json({error:'Authentication required.'});return null}return session}
 function requireMutation(req:Request,res:Response,session:any){if(!canMutate(req,session)){res.status(403).json({error:'Invalid dashboard security token.'});return false}return true}
