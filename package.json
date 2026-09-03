@@ -1,16 +1,16 @@
 {
   "name": "premium-discord-bot",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Production-grade TypeScript Discord bot with moderation, automod, anti-raid/anti-nuke security, dashboard, and health monitoring",
   "main": "dist/index.js",
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-dashboard.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "node dist/index.js",
+    "start": "npm run deploy-commands && node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "deploy-commands": "node dist/deploy-commands.js",
-    "start:production": "npm run build && npm run deploy-commands && npm start"
+    "start:production": "npm run build && npm start"
   },
   "engines": {
     "node": ">=20.0.0"
