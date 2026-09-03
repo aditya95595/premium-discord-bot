@@ -1,0 +1,7 @@
+import { SlashCommandBuilder } from 'discord.js';
+import db from '../db';
+const data=new SlashCommandBuilder().setName('remind').setDescription('Set a reminder').addIntegerOption(o=>o.setName('minutes').setDescription('Minutes from now').setMinValue(1).setMaxValue(10080).setRequired(true)).addStringOption(o=>o.setName('text').setDescription('Reminder text').setMaxLength(500).setRequired(true));
+async function run(s:any,minutes:number,text:string){if(!s.channel?.id)throw new Error('Channel unavailable.');const due=Date.now()+minutes*60000;db.prepare('INSERT INTO reminders(guild_id,user_id,channel_id,text,due_at) VALUES(?,?,?,?,?)').run(s.guild.id,s.user?.id??s.author.id,s.channel.id,text,due);return `Reminder set for <t:${Math.floor(due/1000)}:R>.`;}
+async function executeSlash(i:any){try{return i.reply({content:await run(i,i.options.getInteger('minutes',true),i.options.getString('text',true)),ephemeral:true});}catch(e){return i.reply({content:e instanceof Error?e.message:'Reminder failed.',ephemeral:true});}}
+async function executePrefix(m:any,args:string[]){const n=Number(args[0]);if(!Number.isInteger(n)||n<1||!args.slice(1).length)return m.reply('Usage: !remind <minutes> <text>');try{return m.reply(await run(m,n,args.slice(1).join(' ')));}catch(e){return m.reply(e instanceof Error?e.message:'Reminder failed.');}}
+export={name:'remind',description:'Set a reminder',data,executeSlash,executePrefix};
