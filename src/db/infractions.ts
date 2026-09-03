@@ -1,9 +1,9 @@
 import db from './index';
 
-export function addInfraction(guildId: string, userId: string, moderatorId: string | null, type: string, reason: string | null) {
+export function addInfraction(guildId: string, userId: string, moderatorId: string | null, type: string, reason: string | null, expiresAt?: number) {
   const ts = Date.now();
-  const stmt = db.prepare(`INSERT INTO infractions (guild_id, user_id, moderator_id, type, reason, timestamp) VALUES (?, ?, ?, ?, ?, ?)`);
-  const res = stmt.run(guildId, userId, moderatorId, type, reason, ts);
+  const stmt = db.prepare(`INSERT INTO infractions (guild_id, user_id, moderator_id, type, reason, timestamp, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  const res = stmt.run(guildId, userId, moderatorId, type, reason, ts, expiresAt ?? null);
   return res.lastInsertRowid as number;
 }
 
