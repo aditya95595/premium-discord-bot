@@ -29,31 +29,24 @@ setInterval(()=>{const cutoff=Date.now()-900000;for(const[k,v]of cooldowns)if(v<
 async function executeCommand(source:any,command:Command,args:string[]=[]){
   const check=canUseCommand(source,command,ownerId!);
   const slash=Boolean(source.isChatInputCommand?.());
-  const ephemeral=slash;
-  if(!check.ok)return source.reply({content:check.reason,ephemeral});
+  const sensitive=Boolean(command.sensitive||command.adminOnly||command.ownerOnly||command.permissions?.length);
+  if(!check.ok)return source.reply({content:check.reason,ephemeral:slash});
   const remaining=cooldownLeft(source,command);
-  if(remaining)return source.reply({content:`Please wait ${remaining}s before using this command again.`,ephemeral});
+  if(remaining)return source.reply({content:`Please wait ${remaining}s before using this command again.`,ephemeral:slash});
   try{
     if(slash){
       if(!command.executeSlash)return source.reply({content:'This command is not available as a slash command.',ephemeral:true});
-      // Sensitive slash commands are always private, including their success, validation and usage responses.
-      if(command.sensitive){
-        const originalReply=source.reply.bind(source);
-        source.reply=(options:any)=>originalReply(typeof options==='string'?{content:options,ephemeral:true}:{...options,ephemeral:true});
-      }
+      // Sensitive/admin slash commands are private, including success, validation and usage responses.
+      if(sensitive){const originalReply=source.reply.bind(source);source.reply=(options:any)=>originalReply(typeof options==='string'?{content:options,ephemeral:true}:{...options,ephemeral:true});}
       return await command.executeSlash(source);
     }
     if(!command.executePrefix)return source.reply('This command is not available with the prefix.');
-    // Prefix commands cannot use Discord's ephemeral flag. For sensitive commands, remove the public
-    // invocation and automatically remove the bot response shortly after so admin/config data is not left in chat.
-    if(command.sensitive)await source.delete().catch(()=>{});
+    // Prefix commands have no ephemeral flag. Remove sensitive/admin invocations and their bot response.
+    if(sensitive)await source.delete().catch(()=>{});
     const response=await command.executePrefix(source,args);
-    if(command.sensitive&&response?.delete)void response.delete().catch(()=>{});
+    if(sensitive&&response?.delete)void response.delete().catch(()=>{});
     return response;
-  }catch(e){
-    error(`Command ${command.name} failed`,e instanceof Error?e.message:String(e));
-    return source.reply({content:'An unexpected error occurred while executing this command.',ephemeral}).catch(()=>{});
-  }
+  }catch(e){error(`Command ${command.name} failed`,e instanceof Error?e.message:String(e));return source.reply({content:'An unexpected error occurred while executing this command.',ephemeral:slash}).catch(()=>{});}
 }
 
 client.once(Events.ClientReady,async ready=>{info(`Logged in as ${ready.user.tag}`);info(`Guild count: ${ready.guilds.cache.size}`);startReminderService(ready);startTemporaryPunishmentService(ready);await applyStatusSettings(ready).catch(e=>error('Status setup error',e));});
@@ -72,11 +65,5 @@ client.on(Events.GuildMemberRemove,async member=>{if(!member.guild)return;const 
 process.on('unhandledRejection',e=>error('UnhandledRejection',e));
 process.on('uncaughtException',e=>{error('UncaughtException',e);process.exitCode=1;if(shutdown)shutdown();else process.exit(1);});
 
-async function start(){
-  const server=createHealthServer(client);
-  shutdown=()=>{if(shuttingDown)return;shuttingDown=true;stopReminderService();stopTemporaryPunishmentService();clearStatusTimers();try{server.close();}catch{}try{client.destroy();}catch{}try{db.close();}catch{}};
-  process.once('SIGINT',()=>{shutdown?.();process.exit(0);});
-  process.once('SIGTERM',()=>{shutdown?.();process.exit(0);});
-  try{await client.login(token);info('Startup: database ready');info(`Health: /health on port ${process.env.PORT||3000}`);info(`Discord: ${client.user?.tag||'unknown'}`);info(`Guilds: ${client.guilds.cache.size}`);}catch(e){error('Startup failed',e instanceof Error?e.message:String(e));shutdown();throw e;}
-}
+async function start(){const server=createHealthServer(client);shutdown=()=>{if(shuttingDown)return;shuttingDown=true;stopReminderService();stopTemporaryPunishmentService();clearStatusTimers();try{server.close();}catch{}try{client.destroy();}catch{}try{db.close();}catch{}};process.once('SIGINT',()=>{shutdown?.();process.exit(0);});process.once('SIGTERM',()=>{shutdown?.();process.exit(0);});try{await client.login(token);info('Startup: database ready');info(`Health: /health on port ${process.env.PORT||3000}`);info(`Discord: ${client.user?.tag||'unknown'}`);info(`Guilds: ${client.guilds.cache.size}`);}catch(e){error('Startup failed',e instanceof Error?e.message:String(e));shutdown();throw e;}}
 void start().catch(()=>process.exit(1));
