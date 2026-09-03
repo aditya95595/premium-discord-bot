@@ -36,12 +36,10 @@ async function executeCommand(source:any,command:Command,args:string[]=[]){
   try{
     if(slash){
       if(!command.executeSlash)return source.reply({content:'This command is not available as a slash command.',ephemeral:true});
-      // Sensitive/admin slash commands are private, including success, validation and usage responses.
       if(sensitive){const originalReply=source.reply.bind(source);source.reply=(options:any)=>originalReply(typeof options==='string'?{content:options,ephemeral:true}:{...options,ephemeral:true});}
       return await command.executeSlash(source);
     }
     if(!command.executePrefix)return source.reply('This command is not available with the prefix.');
-    // Prefix commands have no ephemeral flag. Remove sensitive/admin invocations and their bot response.
     if(sensitive)await source.delete().catch(()=>{});
     const response=await command.executePrefix(source,args);
     if(sensitive&&response?.delete)void response.delete().catch(()=>{});
@@ -53,10 +51,10 @@ client.once(Events.ClientReady,async ready=>{info(`Logged in as ${ready.user.tag
 client.on(Events.Error,e=>error('Discord client error',e));
 client.on(Events.ShardError,e=>error('Discord shard error',e));
 client.on(Events.MessageCreate,async message=>{try{if(message.author.bot||!message.guild)return;const prefix=getGuildSettings(message.guild.id).prefix||'!';const parsed=parsePrefix(message.content,prefix);if(parsed){const command=commands.get(parsed.name);if(command)await executeCommand(message,command,parsed.args);return;}await runAutoMod(message);}catch(e){error('Message handler error',e instanceof Error?e.message:String(e));}});
-client.on(Events.InteractionCreate,async interaction=>{try{if(!interaction.isChatInputCommand())return;const command=commands.get(interaction.commandName.toLowerCase());if(!command)return interaction.reply({content:'Unknown command.',ephemeral:true});await executeCommand(interaction,command);}catch(e){error('Interaction handler error',e instanceof Error?e.message:String(e));if(!interaction.replied&&!interaction.deferred)await interaction.reply({content:'An unexpected error occurred.',ephemeral:true}).catch(()=>{});}});
+client.on(Events.InteractionCreate,async interaction=>{const i:any=interaction;try{if(!i.isChatInputCommand())return;const command=commands.get(i.commandName.toLowerCase());if(!command)return i.reply({content:'Unknown command.',ephemeral:true});await executeCommand(i,command);}catch(e){error('Interaction handler error',e instanceof Error?e.message:String(e));if(!i.replied&&!i.deferred)await i.reply({content:'An unexpected error occurred.',ephemeral:true}).catch(()=>{});}});
 client.on(Events.GuildMemberAdd,member=>void recordJoin(member));
-client.on(Events.ChannelDelete,channel=>{if(channel.guild)void recordDestructiveAction(channel.guild,'CHANNEL_DELETE',channel.id);});
-client.on(Events.ChannelUpdate,(oldChannel,newChannel)=>{if(newChannel.guild&&isChannelPermissionEscalation(oldChannel,newChannel))void recordDestructiveAction(newChannel.guild,'CHANNEL_UPDATE',newChannel.id);});
+client.on(Events.ChannelDelete,channel=>{const c:any=channel;if(c.guild)void recordDestructiveAction(c.guild,'CHANNEL_DELETE',c.id);});
+client.on(Events.ChannelUpdate,(oldChannel,newChannel)=>{const n:any=newChannel;if(n.guild&&isChannelPermissionEscalation(oldChannel,newChannel))void recordDestructiveAction(n.guild,'CHANNEL_UPDATE',n.id);});
 client.on(Events.GuildRoleDelete,role=>void recordDestructiveAction(role.guild,'ROLE_DELETE',role.id));
 client.on(Events.GuildRoleUpdate,(oldRole,newRole)=>{if(isRolePermissionEscalation(oldRole,newRole))void recordDestructiveAction(newRole.guild,'ROLE_UPDATE',newRole.id);});
 client.on(Events.GuildBanAdd,ban=>void recordDestructiveAction(ban.guild,'BAN',ban.user.id));
