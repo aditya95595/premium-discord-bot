@@ -47,4 +47,14 @@ export function createDashboardRouter(client:Client){
  return router;
 }
 function guildRole(client:Client,guildId:string,roleId:string){return client.guilds.cache.get(guildId)?.roles.cache.get(roleId)}
-export function dashboardStaticPath(){return path.join(process.cwd(),'dashboard')}
+
+export function dashboardStaticPath(){
+  const configured=process.env.DASHBOARD_PATH?.trim();
+  if(configured)return path.resolve(configured);
+  const candidates=[
+    path.resolve(__dirname,'../dashboard'),
+    path.resolve(process.cwd(),'dashboard'),
+    path.resolve(process.cwd(),'..','dashboard')
+  ];
+  return candidates.find(candidate=>require('fs').existsSync(path.join(candidate,'index.html'))) ?? candidates[0];
+}
