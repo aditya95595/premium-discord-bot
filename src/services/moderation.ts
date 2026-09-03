@@ -15,7 +15,7 @@ export function targetGuard(actor: GuildMember, target: GuildMember | null, bot:
 }
 
 export function createCase(guild: Guild, userId: string, moderatorId: string, type: string, reason: string, expiresAt?: number): number {
-  return addInfraction(guild.id, userId, moderatorId, type, reason) || 0;
+  return addInfraction(guild.id, userId, moderatorId, type, reason, expiresAt) || 0;
 }
 
 export function activeTemporaryCases(guildId: string) {
