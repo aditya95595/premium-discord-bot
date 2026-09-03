@@ -1,4 +1,4 @@
-import { Guild, GuildMember, Role } from 'discord.js';
+import { Guild } from 'discord.js';
 import { error } from '../logger';
 
 export function ensureGuildHasMember(guild: Guild, userId: string) {
@@ -14,9 +14,11 @@ export function isIdLike(id: string) {
   return typeof id === 'string' && /^\d{17,}$/.test(id);
 }
 
-export function safeExecute<T>(cb: () => Promise<T> | T) {
-  return cb().catch((err) => {
+export async function safeExecute<T>(cb: () => Promise<T> | T): Promise<T> {
+  try {
+    return await cb();
+  } catch (err: any) {
     error('safeExecute error:', err && err.message ? err.message : err);
     return null as unknown as T;
-  });
+  }
 }
