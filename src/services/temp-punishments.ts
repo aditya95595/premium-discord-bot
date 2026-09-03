@@ -10,15 +10,18 @@ export function startTemporaryPunishmentService(client: Client) {
     try {
       const rows = db.prepare("SELECT * FROM infractions WHERE expires_at IS NOT NULL AND expires_at <= ? AND type IN ('timeout','tempban') ORDER BY expires_at LIMIT 25").all(Date.now()) as any[];
       for (const row of rows) {
-        db.prepare('UPDATE infractions SET expires_at=NULL WHERE id=? AND expires_at IS NOT NULL').run(row.id);
         const guild = client.guilds.cache.get(row.guild_id);
         if (!guild) continue;
+        let completed=false;
         if (row.type === 'timeout') {
           const member = await guild.members.fetch(row.user_id).catch(() => null);
-          if (member?.communicationDisabledUntilTimestamp) await member.timeout(null, 'Temporary timeout expired').catch(() => {});
+          if (!member) completed=true; // They left; there is no active timeout to clear.
+          else if (!member.communicationDisabledUntilTimestamp || member.communicationDisabledUntilTimestamp<=Date.now()) completed=true;
+          else completed=await member.timeout(null, 'Temporary timeout expired').then(()=>true).catch(()=>false);
         } else if (row.type === 'tempban') {
-          await guild.members.unban(row.user_id, 'Temporary ban expired').catch(() => {});
+          completed=await guild.members.unban(row.user_id, 'Temporary ban expired').then(()=>true).catch(()=>false);
         }
+        if(completed)db.prepare('UPDATE infractions SET expires_at=NULL WHERE id=? AND expires_at IS NOT NULL').run(row.id);
       }
     } catch (e) { warn('Temporary punishment service error', e instanceof Error ? e.message : String(e)); }
   };
