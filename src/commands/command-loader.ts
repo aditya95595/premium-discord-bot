@@ -8,31 +8,26 @@ export type Command = {
   description: string;
   adminOnly?: boolean;
   ownerOnly?: boolean;
-  permissions?: string[]; // Discord permissions names
+  permissions?: string[];
+  cooldown?: number;
   executeSlash?: (interaction: any) => Promise<any>;
   executePrefix?: (message: any, args: string[]) => Promise<any>;
-  data?: any; // Slash command builder
+  data?: any;
 };
 
 export function loadCommands(client: Client) {
   const commands = new Collection<string, Command>();
   const commandsPath = path.join(__dirname);
-  const files = fs.readdirSync(commandsPath).filter(f => f.endsWith('.js') || f.endsWith('.ts'));
+  const files = fs.readdirSync(commandsPath).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && f !== 'command-loader.ts' && f !== 'command-loader.js');
   for (const file of files) {
-    if (file === 'command-loader.ts') continue;
-    const full = path.join(commandsPath, file);
     try {
-      const mod = require(full);
-      if (mod && mod.default && mod.default.name) {
-        commands.set(mod.default.name, mod.default);
-      } else if (mod && mod.name) {
-        commands.set(mod.name, mod);
-      }
+      const mod = require(path.join(commandsPath, file));
+      const command = mod?.default ?? mod;
+      if (command?.name) commands.set(command.name.toLowerCase(), command);
     } catch (err) {
-      console.error('Failed to load command', file, err);
+      console.error(`Failed to load command ${file}:`, err);
     }
   }
-  // attach to client for convenience
   (client as any).commands = commands;
   return commands;
 }
