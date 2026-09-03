@@ -2,16 +2,34 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { getGuildSettings, setGuildSetting } from '../db/settings';
 
 const data = new SlashCommandBuilder()
-  .setName('config').setDescription('Configure this server')
+  .setName('config')
+  .setDescription('View or update server moderation, AutoMod, raid, and bot settings.')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-  .addStringOption(o => o.setName('key').setDescription('Setting').setRequired(true).addChoices(
-    {name:'prefix',value:'prefix'},{name:'mod-log',value:'mod_log_channel'},{name:'staff-roles',value:'staff_roles'},
-    {name:'automod',value:'automod_enabled'},{name:'profanity',value:'automod_profanity'},{name:'links',value:'automod_links'},
-    {name:'invites',value:'automod_invites'},{name:'caps',value:'automod_caps'},{name:'spam-threshold',value:'automod_spam_threshold'},
-    {name:'mention-limit',value:'automod_mention_limit'},{name:'blocked-words',value:'automod_blocked_words'},
-    {name:'automod-punishment',value:'automod_punishment'},{name:'raid-mode',value:'raid_mode'},{name:'raid-threshold',value:'raid_threshold'},
-  ))
-  .addStringOption(o => o.setName('value').setDescription('New value').setRequired(false));
+  .addStringOption(o => o
+    .setName('key')
+    .setDescription('The server setting to view or change.')
+    .setRequired(true)
+    .addChoices(
+      {name:'prefix',value:'prefix'},
+      {name:'mod-log',value:'mod_log_channel'},
+      {name:'staff-roles',value:'staff_roles'},
+      {name:'automod',value:'automod_enabled'},
+      {name:'profanity',value:'automod_profanity'},
+      {name:'links',value:'automod_links'},
+      {name:'invites',value:'automod_invites'},
+      {name:'caps',value:'automod_caps'},
+      {name:'spam-threshold',value:'automod_spam_threshold'},
+      {name:'mention-limit',value:'automod_mention_limit'},
+      {name:'blocked-words',value:'automod_blocked_words'},
+      {name:'automod-punishment',value:'automod_punishment'},
+      {name:'raid-mode',value:'raid_mode'},
+      {name:'raid-threshold',value:'raid_threshold'},
+    ))
+  .addStringOption(o => o
+    .setName('value')
+    .setDescription('Optional new value; omit it to view the current setting.')
+    .setRequired(false));
+
 const boolKeys = new Set(['automod_enabled','automod_profanity','automod_links','automod_invites','automod_caps','raid_mode']);
 const ranges: Record<string,[number,number]> = {automod_spam_threshold:[3,20],automod_mention_limit:[2,20],raid_threshold:[3,50]};
 const punishments = new Set(['delete','timeout','ban']);
@@ -31,10 +49,25 @@ async function run(s:any, key:string, value:string|null) {
   return `Updated **${key}** to **${value}**.`;
 }
 
-async function executeSlash(i:any) { try { return i.reply({content:await run(i,i.options.getString('key',true),i.options.getString('value')),ephemeral:true}); } catch(e) { return i.reply({content:e instanceof Error?e.message:'Invalid configuration.',ephemeral:true}); } }
+async function executeSlash(i:any) {
+  try { return i.reply({content:await run(i,i.options.getString('key',true),i.options.getString('value')),ephemeral:true}); }
+  catch(e) { return i.reply({content:e instanceof Error?e.message:'Invalid configuration.',ephemeral:true}); }
+}
+
 async function executePrefix(m:any,args:string[]) {
   const prefix = getGuildSettings(m.guild.id).prefix || '!';
   if (!args[0]) return m.reply(`Usage: ${prefix}config <key> <value>.`);
-  try { return m.reply(await run(m,args[0],args[1]??null)); } catch(e) { return m.reply(e instanceof Error?e.message:'Invalid configuration.'); }
+  try { return m.reply(await run(m,args[0],args[1]??null)); }
+  catch(e) { return m.reply(e instanceof Error?e.message:'Invalid configuration.'); }
 }
-export default {name:'config',description:'Configure this server',adminOnly:true,permissions:['ManageGuild'],data,executeSlash,executePrefix};
+
+export default {
+  name:'config',
+  description:'View or update server moderation, AutoMod, raid, and bot settings.',
+  adminOnly:true,
+  sensitive:true,
+  permissions:['ManageGuild'],
+  data,
+  executeSlash,
+  executePrefix
+};
