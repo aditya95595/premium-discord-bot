@@ -8,6 +8,7 @@ export type Command = {
   description: string;
   adminOnly?: boolean;
   ownerOnly?: boolean;
+  sensitive?: boolean;
   permissions?: string[];
   cooldown?: number;
   executeSlash?: (interaction: any) => Promise<any>;
