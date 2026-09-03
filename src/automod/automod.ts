@@ -2,43 +2,16 @@ import { Message } from 'discord.js';
 import { getGuildSettings } from '../db/settings';
 import { addInfraction } from '../db/infractions';
 import { warn as logWarn } from '../logger';
-
-// simple profanity list - for extension use file/db
-const PROFANITY = ['badword1', 'badword2', 'badword3'];
-const LINK_REGEX = /(https?:\/\/[^\s]+)/i;
-
-export async function runAutoMod(message: Message) {
-  if (!message.guild || message.author.bot) return;
-  const settings = getGuildSettings(message.guild.id);
-  if (!settings.automod_enabled) return;
-  const content = message.content ?? '';
-  // profanity
-  if (settings.automod_profanity) {
-    for (const bad of PROFANITY) {
-      if (content.toLowerCase().includes(bad)) {
-        await message.delete().catch(() => {});
-        addInfraction(message.guild.id, message.author.id, null, 'automod-profanity', bad);
-        logWarn('Automod removed profanity message', { guild: message.guild.id, user: message.author.id });
-        return;
-      }
-    }
-  }
-  // links
-  if (settings.automod_links && LINK_REGEX.test(content)) {
-    await message.delete().catch(() => {});
-    addInfraction(message.guild.id, message.author.id, null, 'automod-link', 'link');
-    return;
-  }
-  // caps ratio
-  if (settings.automod_caps) {
-    const letters = content.replace(/[^A-Za-z]/g, '');
-    if (letters.length >= 5) {
-      const caps = letters.split('').filter(c => c === c.toUpperCase()).length;
-      if (caps / letters.length > 0.8) {
-        await message.delete().catch(() => {});
-        addInfraction(message.guild.id, message.author.id, null, 'automod-caps', 'caps');
-        return;
-      }
-    }
-  }
-}
+const PROFANITY=['badword1','badword2','badword3'];
+const URL=/(https?:\/\/[^\s]+)/i;
+const INVITE=/(discord(?:\.gg|\.com\/invite)\/[^\s]+)/i;
+const recent=new Map<string,number[]>();
+function prune(key:string,now:number){const a=(recent.get(key)||[]).filter(t=>now-t<10000);recent.set(key,a);return a;}
+export async function runAutoMod(message:Message){if(!message.guild||message.author.bot)return;const s=getGuildSettings(message.guild.id),c=message.content||'',now=Date.now(),key=`${message.guild.id}:${message.author.id}`;if(!s.automod_enabled)return;const punish=async(type:string,reason:string)=>{await message.delete().catch(()=>{});addInfraction(message.guild!.id,message.author.id,null,type,reason);logWarn('AutoMod action',{guild:message.guild!.id,user:message.author.id,type});};
+const arr=prune(key,now);arr.push(now);recent.set(key,arr);if(arr.length>=Math.max(3,s.automod_spam_threshold))return punish('automod-spam','rapid messages');
+if(s.automod_mention_limit>0&&message.mentions.users.size+message.mentions.roles.size>=s.automod_mention_limit)return punish('automod-mentions','mention spam');
+if(s.automod_invites&&INVITE.test(c))return punish('automod-invite','discord invite');
+if(s.automod_links&&URL.test(c))return punish('automod-link','link');
+const blocked=(s.automod_blocked_words||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);if(blocked.some(w=>c.toLowerCase().includes(w)))return punish('automod-word','blocked word');
+if(s.automod_profanity&&PROFANITY.some(w=>c.toLowerCase().includes(w)))return punish('automod-profanity','profanity');
+if(s.automod_caps){const letters=c.replace(/[^A-Za-z]/g,'');const caps=letters.replace(/[^A-Z]/g,'').length;if(letters.length>=8&&caps/letters.length>.8)return punish('automod-caps','excessive caps');}}
