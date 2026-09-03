@@ -26,7 +26,11 @@ export function createHealthServer(client: Client) {
   });
   app.use(createDashboardRouter(client));
   app.use(createCocDashboardRouter(client));
-  app.use('/dashboard', express.static(dashboardStaticPath(), {index:'index.html',maxAge:'1h',dotfiles:'deny'}));
+  const staticDashboard = dashboardStaticPath();
+  app.use('/dashboard', express.static(staticDashboard, {index:'index.html',maxAge:'1h',dotfiles:'deny'}));
+  // Replit's managed web preview may expose the service under /dashboard-web.
+  // Keep it as a compatibility alias to the same authenticated dashboard assets.
+  app.use('/dashboard-web', express.static(staticDashboard, {index:'index.html',maxAge:'1h',dotfiles:'deny'}));
   app.get('/', (_req, res) => res.redirect('/dashboard/'));
   app.use((_req, res) => res.status(404).json({error:'Not found'}));
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => { info(`HTTP request rejected: ${err instanceof Error ? err.message : String(err)}`); if (res.headersSent) return; res.status(400).json({error:'Invalid request.'}); });
