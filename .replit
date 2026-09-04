@@ -1,0 +1,11 @@
+# Replit configuration for the production Discord bot + dashboard.
+# Secrets are configured in Replit Secrets, never in this file.
+
+entrypoint = "src/index.ts"
+run = "npm run start:production"
+
+[deployment]
+run = ["npm", "run", "start:production"]
+
+[env]
+NODE_ENV = "production"
