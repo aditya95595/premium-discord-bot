@@ -4,7 +4,7 @@ import { getGuildSettings } from '../db/settings';
 
 const GLOBAL_SCOPE = '__global__';
 let timer: NodeJS.Timeout | undefined;
-const typeMap: Record<string, ActivityType> = {
+const typeMap: Record<string, ActivityType.Playing | ActivityType.Streaming | ActivityType.Listening | ActivityType.Watching | ActivityType.Competing> = {
   PLAYING: ActivityType.Playing,
   STREAMING: ActivityType.Streaming,
   LISTENING: ActivityType.Listening,
@@ -14,33 +14,20 @@ const typeMap: Record<string, ActivityType> = {
 
 export async function applyStatusSettings(client: Client) {
   clearStatusTimers();
-
   const settings = getGuildSettings(GLOBAL_SCOPE);
-  const statuses = db.prepare(
-    'SELECT text,type FROM statuses WHERE guild_id=? ORDER BY position,id',
-  ).all(GLOBAL_SCOPE) as Array<{ text: string; type: string }>;
-
+  const statuses = db.prepare('SELECT text,type FROM statuses WHERE guild_id=? ORDER BY position,id').all(GLOBAL_SCOPE) as Array<{ text: string; type: string }>;
   if (!settings.status_rotation_enabled || !statuses.length) return;
-
   let index = 0;
   const set = () => {
     const item = statuses[index++ % statuses.length];
-    client.user?.setActivity(item.text, {
-      type: typeMap[item.type] ?? ActivityType.Playing,
-    });
+    client.user?.setActivity(item.text, { type: typeMap[item.type] ?? ActivityType.Playing });
   };
-
   set();
   timer = setInterval(set, Math.max(15, settings.status_rotation_interval) * 1000);
   timer.unref();
 }
 
-export function setGlobalPresence(
-  client: Client,
-  text: string,
-  type: ActivityType,
-  status: PresenceStatusData = 'online',
-) {
+export function setGlobalPresence(client: Client, text: string, type: ActivityType, status: PresenceStatusData = 'online') {
   clearStatusTimers();
   client.user?.setPresence({ status, activities: [{ name: text, type }] });
 }
