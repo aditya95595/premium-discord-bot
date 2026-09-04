@@ -29,11 +29,19 @@ setInterval(()=>{const cutoff=Date.now()-900000;for(const[k,v]of cooldowns)if(v<
 
 function installReplyStyling(source:any, command:Command, ephemeral:boolean) {
   const originalReply = source.reply?.bind(source);
-  if (originalReply) source.reply = (options:any) => originalReply(normalizeReply(options, command.name), ephemeral ? true : undefined);
+  if (originalReply) source.reply = (options:any) => {
+    const normalized = normalizeReply(options, command.name);
+    if (ephemeral && normalized && typeof normalized === 'object') normalized.ephemeral = true;
+    return originalReply(normalized);
+  };
   const originalEdit = source.editReply?.bind(source);
   if (originalEdit) source.editReply = (options:any) => originalEdit(normalizeReply(options, command.name));
   const originalFollow = source.followUp?.bind(source);
-  if (originalFollow) source.followUp = (options:any) => originalFollow(normalizeReply(options, command.name));
+  if (originalFollow) source.followUp = (options:any) => {
+    const normalized = normalizeReply(options, command.name);
+    if (ephemeral && normalized && typeof normalized === 'object') normalized.ephemeral = true;
+    return originalFollow(normalized);
+  };
   return () => {
     if (originalReply) source.reply = originalReply;
     if (originalEdit) source.editReply = originalEdit;
