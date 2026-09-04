@@ -4,7 +4,7 @@ import { getGuildSettings } from '../db/settings';
 
 const GLOBAL_SCOPE = '__global__';
 let timer: NodeJS.Timeout | undefined;
-const typeMap: Record<string, ActivityType.Playing | ActivityType.Streaming | ActivityType.Listening | ActivityType.Watching | ActivityType.Competing> = {
+const typeMap: Record<string, ActivityType> = {
   PLAYING: ActivityType.Playing,
   STREAMING: ActivityType.Streaming,
   LISTENING: ActivityType.Listening,
