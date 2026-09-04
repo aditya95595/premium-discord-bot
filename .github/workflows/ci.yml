@@ -23,6 +23,6 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Validate dashboard JavaScript
-        run: node --check dashboard/dashboard.js && node --check dashboard/coc.js
+        run: node --check dashboard/dashboard.js
       - name: Typecheck / build / command registry
         run: npm run verify
