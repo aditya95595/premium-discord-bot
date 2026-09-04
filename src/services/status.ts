@@ -2,9 +2,16 @@ import { ActivityType, type Client, type PresenceStatusData } from 'discord.js';
 import db from '../db';
 import { getGuildSettings } from '../db/settings';
 
+type StandardActivityType =
+  | ActivityType.Playing
+  | ActivityType.Streaming
+  | ActivityType.Listening
+  | ActivityType.Watching
+  | ActivityType.Competing;
+
 const GLOBAL_SCOPE = '__global__';
 let timer: NodeJS.Timeout | undefined;
-const typeMap: Record<string, ActivityType> = {
+const typeMap: Record<string, StandardActivityType> = {
   PLAYING: ActivityType.Playing,
   STREAMING: ActivityType.Streaming,
   LISTENING: ActivityType.Listening,
@@ -27,7 +34,12 @@ export async function applyStatusSettings(client: Client) {
   timer.unref();
 }
 
-export function setGlobalPresence(client: Client, text: string, type: ActivityType, status: PresenceStatusData = 'online') {
+export function setGlobalPresence(
+  client: Client,
+  text: string,
+  type: StandardActivityType,
+  status: PresenceStatusData = 'online',
+) {
   clearStatusTimers();
   client.user?.setPresence({ status, activities: [{ name: text, type }] });
 }
