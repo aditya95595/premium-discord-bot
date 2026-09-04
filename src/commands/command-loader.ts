@@ -16,19 +16,37 @@ export type Command = {
   data?: any;
 };
 
+/**
+ * Loads the single canonical command registry used by both prefix and slash execution.
+ * Duplicate command names are a startup error instead of being silently overwritten.
+ */
 export function loadCommands(client: Client) {
   const commands = new Collection<string, Command>();
   const commandsPath = path.join(__dirname);
-  const files = fs.readdirSync(commandsPath).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && f !== 'command-loader.ts' && f !== 'command-loader.js');
+  if (!fs.existsSync(commandsPath)) throw new Error(`Command directory not found: ${commandsPath}`);
+
+  const files = fs.readdirSync(commandsPath)
+    .filter(f => f.endsWith('.js') && f !== 'command-loader.js')
+    .sort((a, b) => a.localeCompare(b));
+
   for (const file of files) {
-    try {
-      const mod = require(path.join(commandsPath, file));
-      const command = mod?.default ?? mod;
-      if (command?.name) commands.set(command.name.toLowerCase(), command);
-    } catch (err) {
-      console.error(`Failed to load command ${file}:`, err);
-    }
+    const mod = require(path.join(commandsPath, file));
+    const command = mod?.default ?? mod;
+    if (!command?.name) continue;
+
+    const name = String(command.name).trim().toLowerCase();
+    if (!/^[a-z0-9_-]{1,32}$/.test(name)) throw new Error(`Invalid command name in ${file}: ${command.name}`);
+    if (!command.data?.toJSON) throw new Error(`Command ${name} in ${file} is missing slash command data.`);
+    if (typeof command.executeSlash !== 'function') throw new Error(`Command ${name} in ${file} is missing executeSlash.`);
+    if (typeof command.executePrefix !== 'function') throw new Error(`Command ${name} in ${file} is missing executePrefix.`);
+    if (commands.has(name)) throw new Error(`Duplicate command name "${name}" detected while loading ${file}.`);
+
+    const slashName = String(command.data.toJSON().name ?? '').toLowerCase();
+    if (slashName !== name) throw new Error(`Command ${name} in ${file} has mismatched slash name "${slashName}".`);
+    commands.set(name, { ...command, name });
   }
+
+  if (!commands.size) throw new Error('No commands were loaded.');
   (client as any).commands = commands;
   return commands;
 }
