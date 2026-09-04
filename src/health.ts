@@ -3,7 +3,6 @@ import db from './db';
 import { info } from './logger';
 import type { Client } from 'discord.js';
 import { createDashboardRouter } from './dashboard';
-import { createCocDashboardRouter } from './coc-dashboard';
 import path from 'path';
 
 export function createHealthServer(client: Client) {
@@ -26,7 +25,6 @@ export function createHealthServer(client: Client) {
     res.status(dbok && discord ? 200 : 503).json({status: dbok && discord ? 'ok' : 'degraded',database: dbok ? 'connected' : 'down',discord: discord ? 'connected' : 'disconnected',user: client.user?.tag ?? null,guilds: client.guilds.cache.size,uptime: Math.floor(process.uptime())});
   });
   app.use(createDashboardRouter(client));
-  app.use(createCocDashboardRouter(client));
   const staticDashboard = path.resolve(process.env.DASHBOARD_PATH || path.join(__dirname, '..', 'dashboard'));
   app.use('/dashboard', express.static(staticDashboard, {index:'index.html',maxAge:'1h',dotfiles:'deny'}));
   app.use('/dashboard-web', express.static(staticDashboard, {index:'index.html',maxAge:'1h',dotfiles:'deny'}));
