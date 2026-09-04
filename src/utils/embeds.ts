@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, type ColorResolvable } from 'discord.js';
 
 const BRAND = 'Premium Bot';
 
@@ -20,7 +20,7 @@ export function brandEmbed(options: ConstructorParameters<typeof EmbedBuilder>[0
   return embed;
 }
 
-export function textEmbed(content: string, title = 'Message', color = COLORS.primary) {
+export function textEmbed(content: string, title = 'Message', color: ColorResolvable = COLORS.primary) {
   return brandEmbed().setColor(color).setTitle(title).setDescription(content);
 }
 
@@ -45,7 +45,7 @@ export function normalizeReply(value: any, fallbackTitle = 'Premium Bot') {
   if (!value || typeof value !== 'object') return value;
   if (typeof value.content === 'string' && !value.embeds?.length) {
     const text = value.content.trim();
-    let color = COLORS.primary;
+    let color: ColorResolvable = COLORS.primary;
     let title = fallbackTitle;
     if (/^(error|failed|unable|cannot|can't|invalid|not found|missing)/i.test(text)) {
       color = COLORS.danger;
