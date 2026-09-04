@@ -1,5 +1,6 @@
-# Replit configuration for the production Discord bot + dashboard.
-# Secrets are configured in Replit Secrets, never in this file.
+# Production Replit configuration: Discord bot + Express web dashboard.
+# The dashboard is a WEB SERVER, not a Canvas app.
+# Replit Secrets must contain credentials; never put secrets here.
 
 entrypoint = "src/index.ts"
 run = "npm run start:production"
@@ -9,3 +10,4 @@ run = ["npm", "run", "start:production"]
 
 [env]
 NODE_ENV = "production"
+PORT = "3000"
