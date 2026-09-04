@@ -2,8 +2,9 @@ import express from 'express';
 import db from './db';
 import { info } from './logger';
 import type { Client } from 'discord.js';
-import { createDashboardRouter, dashboardStaticPath } from './dashboard';
+import { createDashboardRouter } from './dashboard';
 import { createCocDashboardRouter } from './coc-dashboard';
+import path from 'path';
 
 export function createHealthServer(client: Client) {
   const app = express();
@@ -26,10 +27,8 @@ export function createHealthServer(client: Client) {
   });
   app.use(createDashboardRouter(client));
   app.use(createCocDashboardRouter(client));
-  const staticDashboard = dashboardStaticPath();
+  const staticDashboard = path.resolve(process.env.DASHBOARD_PATH || path.join(__dirname, '..', 'dashboard'));
   app.use('/dashboard', express.static(staticDashboard, {index:'index.html',maxAge:'1h',dotfiles:'deny'}));
-  // Replit's managed web preview may expose the service under /dashboard-web.
-  // Keep it as a compatibility alias to the same authenticated dashboard assets.
   app.use('/dashboard-web', express.static(staticDashboard, {index:'index.html',maxAge:'1h',dotfiles:'deny'}));
   app.get('/', (_req, res) => res.redirect('/dashboard/'));
   app.use((_req, res) => res.status(404).json({error:'Not found'}));
