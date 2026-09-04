@@ -8,8 +8,7 @@ function buildPages(source:any) {
   const groups: Record<string, any[]> = {
     '🛡️ Moderation': all.filter((c:any) => ['ban','kick','timeout','warn','warnings','clear','lock','unlock','history'].includes(c.name)),
     '🔐 Security & Config': all.filter((c:any) => ['security','config','command-permission','prefix','status'].includes(c.name)),
-    '⚔️ Clash of Clans': all.filter((c:any) => c.name === 'coc'),
-    '🔧 Utility': all.filter((c:any) => !['ban','kick','timeout','warn','warnings','clear','lock','unlock','history','security','config','command-permission','prefix','status','coc'].includes(c.name))
+    '🔧 Utility': all.filter((c:any) => !['ban','kick','timeout','warn','warnings','clear','lock','unlock','history','security','config','command-permission','prefix','status'].includes(c.name))
   };
   const entries = Object.entries(groups).filter(([, commands]) => commands.length);
   const pages: EmbedBuilder[] = [];
