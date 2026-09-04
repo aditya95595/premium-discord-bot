@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-dashboard.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "verify": "npm run typecheck && npm run build && node -e \"require('fs').accessSync('dist/index.js'); require('fs').accessSync('dist/dashboard/index.html'); console.log('Build verification passed.')\"",
+    "validate:commands": "npm run build && node dist/validate-commands.js",
+    "verify": "npm run typecheck && npm run build && node dist/validate-commands.js && node -e \"require('fs').accessSync('dist/index.js'); require('fs').accessSync('dist/dashboard/index.html'); console.log('Build verification passed.')\"",
     "start": "npm run deploy-commands && node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "deploy-commands": "node dist/deploy-commands.js",
