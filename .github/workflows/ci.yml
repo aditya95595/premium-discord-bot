@@ -24,5 +24,5 @@ jobs:
         run: npm install
       - name: Validate dashboard JavaScript
         run: node --check dashboard/dashboard.js && node --check dashboard/coc.js
-      - name: Typecheck / build
-        run: npm run build
+      - name: Typecheck / build / command registry
+        run: npm run verify
