@@ -16,17 +16,17 @@ export type Command = {
   data?: any;
 };
 
-/**
- * Loads the single canonical command registry used by both prefix and slash execution.
- * Duplicate command names are a startup error instead of being silently overwritten.
- */
+/** Single canonical command registry for both slash and prefix execution. */
 export function loadCommands(client: Client) {
   const commands = new Collection<string, Command>();
   const commandsPath = path.join(__dirname);
   if (!fs.existsSync(commandsPath)) throw new Error(`Command directory not found: ${commandsPath}`);
 
+  // ts-node-dev runs directly from src/, while production runs compiled dist/ files.
+  const extension = path.extname(__filename) === '.ts' ? '.ts' : '.js';
+  const loaderName = `command-loader${extension}`;
   const files = fs.readdirSync(commandsPath)
-    .filter(f => f.endsWith('.js') && f !== 'command-loader.js')
+    .filter(f => f.endsWith(extension) && f !== loaderName)
     .sort((a, b) => a.localeCompare(b));
 
   for (const file of files) {
@@ -41,7 +41,7 @@ export function loadCommands(client: Client) {
     if (typeof command.executePrefix !== 'function') throw new Error(`Command ${name} in ${file} is missing executePrefix.`);
     if (commands.has(name)) throw new Error(`Duplicate command name "${name}" detected while loading ${file}.`);
 
-    const slashName = String(command.data.toJSON().name ?? '').toLowerCase();
+    const slashName = String(command.data.toJSON().name ?? '').trim().toLowerCase();
     if (slashName !== name) throw new Error(`Command ${name} in ${file} has mismatched slash name "${slashName}".`);
     commands.set(name, { ...command, name });
   }
